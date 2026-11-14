@@ -1,19 +1,45 @@
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
+import CourseCard from '../components/CourseCard'
 
 export default function Dashboard() {
-    const { profile, logout } = useAuth()
+    const { profile } = useAuth()
+    const [courses, setCourses] = useState(null)
+    const isStudent = profile.role === 'student'
+
+    useEffect(() => {
+        if (isStudent) api('/api/my-courses').then(setCourses).catch(() => setCourses([]))
+    }, [isStudent])
 
     return (
-        <div className="flex min-h-screen items-center justify-center bg-slate-900 text-slate-100">
-            <div className="space-y-2 rounded-xl bg-slate-800 p-8 shadow-lg">
-                <h1 className="text-2xl font-bold text-emerald-400">Hi, {profile.name}</h1>
-                <p className="text-slate-400">
-                    {profile.email} · <span className="capitalize">{profile.role}</span>
-                </p>
-                <button onClick={logout} className="mt-4 rounded-lg border border-slate-600 px-4 py-2 hover:bg-slate-700">
-                    Log out
-                </button>
-            </div>
-        </div>
+        <>
+            <h1 className="text-2xl font-bold">Hi, {profile.name}</h1>
+
+            {!isStudent && <p className="mt-4 text-slate-400">Instructor tools are coming soon.</p>}
+
+            {isStudent && (
+                <>
+                    <h2 className="mb-4 mt-8 text-lg font-semibold text-slate-300">My courses</h2>
+                    {courses === null ? (
+                        <p className="text-slate-400">Loading…</p>
+                    ) : courses.length === 0 ? (
+                        <p className="text-slate-400">
+                            You haven't enrolled in anything yet.{' '}
+                            <Link to="/courses" className="text-emerald-400 hover:underline">
+                                Browse the catalog
+                            </Link>
+                        </p>
+                    ) : (
+                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                            {courses.map((c) => (
+                                <CourseCard key={c.id} course={c} />
+                            ))}
+                        </div>
+                    )}
+                </>
+            )}
+        </>
     )
 }
