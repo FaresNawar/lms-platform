@@ -147,7 +147,14 @@ function LessonView({ id }) {
 
     const outputPane = (
         <Pane title="Output" flush={isWeb}>
-            <Output isWeb={isWeb} webRun={webRun} lines={runner.lines} running={runner.running} />
+            <Output
+                isWeb={isWeb}
+                webRun={webRun}
+                lines={runner.lines}
+                running={runner.running}
+                pending={runner.pending}
+                onInput={runner.submitInput}
+            />
         </Pane>
     )
 

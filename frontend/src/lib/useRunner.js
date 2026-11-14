@@ -1,12 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
-const TIMEOUT_MS = 10000 // how long the student's code may run
+// The service worker that lets the code worker wait for typed input (see public/stdin-sw.js)
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/stdin-sw.js').catch(() => { })
+}
+
+// How long code may run. Time spent waiting for the student to type doesn't count.
+const TIMEOUT_MS = 10000
 
 export function useRunner(language) {
     const workerRef = useRef(null)
     const timerRef = useRef(null)
     const [lines, setLines] = useState([])
     const [running, setRunning] = useState(false)
+    const [pending, setPending] = useState(null) // { id, prompt } while the program waits for input
 
     const add = useCallback((type, text) => setLines((prev) => [...prev, { type, text }]), [])
 
@@ -14,7 +21,17 @@ export function useRunner(language) {
         clearTimeout(timerRef.current)
         workerRef.current?.terminate()
         workerRef.current = null
+        setPending(null)
     }, [])
+
+    const arm = useCallback(() => {
+        clearTimeout(timerRef.current)
+        timerRef.current = setTimeout(() => {
+            kill()
+            add('error', `Stopped: your code ran longer than ${TIMEOUT_MS / 1000} seconds (infinite loop?).`)
+            setRunning(false)
+        }, TIMEOUT_MS)
+    }, [add, kill])
 
     // Leaving the page kills any running worker
     useEffect(() => kill, [kill])
@@ -27,15 +44,16 @@ export function useRunner(language) {
 
                 worker.onmessage = ({ data }) => {
                     if (data.type === 'exec') {
-                        // The student's code starts NOW (after any Python loading), so start the stopwatch
+                        // The student's code starts NOW (after any Python loading): start the stopwatch
                         setLines((prev) => prev.filter((l) => l.type !== 'info'))
-                        timerRef.current = setTimeout(() => {
-                            kill()
-                            add('error', `Stopped: your code ran longer than ${TIMEOUT_MS / 1000} seconds (infinite loop?).`)
-                            setRunning(false)
-                        }, TIMEOUT_MS)
+                        arm()
+                    } else if (data.type === 'input') {
+                        // The program is waiting for the student: pause the stopwatch
+                        clearTimeout(timerRef.current)
+                        setPending({ id: data.id, prompt: data.text })
                     } else if (data.type === 'done') {
                         clearTimeout(timerRef.current)
+                        setPending(null)
                         setRunning(false)
                     } else {
                         add(data.type, data.text)
@@ -52,10 +70,32 @@ export function useRunner(language) {
             }
 
             setLines([])
+            setPending(null)
             setRunning(true)
             workerRef.current.postMessage({ language, code })
         },
-        [language, add, kill],
+        [language, add, kill, arm],
+    )
+
+    const submitInput = useCallback(
+        (value) => {
+            if (!pending) return
+            const controller = navigator.serviceWorker?.controller
+
+            if (!controller) {
+                // Without the service worker the program would wait forever, so stop it
+                kill()
+                add('error', 'Interactive input is not available yet. Reload the page and try again.')
+                setRunning(false)
+                return
+            }
+
+            controller.postMessage({ id: pending.id, text: value })
+            add('input', pending.prompt + value)
+            setPending(null)
+            arm()
+        },
+        [pending, add, kill, arm],
     )
 
     const stop = useCallback(() => {
@@ -64,5 +104,5 @@ export function useRunner(language) {
         setRunning(false)
     }, [add, kill])
 
-    return { lines, running, run, stop }
+    return { lines, running, pending, run, stop, submitInput }
 }
