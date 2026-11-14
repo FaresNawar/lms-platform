@@ -1,26 +1,54 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { api } from '../lib/api'
+import { useAuth } from '../context/AuthContext'
+import { useIsDesktop } from '../lib/useIsDesktop'
+import CodeEditor from '../components/CodeEditor'
 
-function Pane({ title, children }) {
+// `flush` panes (editor, output) fill the whole pane with no padding.
+// The absolute-inset trick gives children a guaranteed height to fill.
+function Pane({ title, actions, flush = false, children }) {
     return (
-        <section className="flex min-h-[24rem] flex-col border-slate-800 lg:min-h-0 lg:border-r last:border-r-0">
-            <h2 className="border-b border-slate-800 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                {title}
+        <section className="flex h-full min-h-[24rem] flex-col border-b border-slate-800 lg:min-h-0 lg:border-b-0">
+            <h2 className="flex items-center justify-between border-b border-slate-800 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <span>{title}</span>
+                {actions}
             </h2>
-            <div className="min-h-0 flex-1 overflow-auto p-4">{children}</div>
+            <div className={`relative min-h-0 flex-1 ${flush ? '' : 'overflow-auto p-4'}`}>
+                {flush ? <div className="absolute inset-0">{children}</div> : children}
+            </div>
         </section>
     )
 }
 
+function Handle() {
+    return (
+        <PanelResizeHandle className="w-1 bg-slate-800 transition-colors hover:bg-emerald-400 data-[resize-handle-state=drag]:bg-emerald-400" />
+    )
+}
+
 function LessonView({ id }) {
+    const { profile } = useAuth()
+    const isDesktop = useIsDesktop()
     const [lesson, setLesson] = useState(null)
+    const [code, setCode] = useState('')
     const [error, setError] = useState('')
 
+    // Drafts are saved per user AND per assignment, so two people sharing
+    // a browser never see each other's work.
+    const draftKey = (assignmentId) => `draft:${profile.id}:${assignmentId}`
+
     useEffect(() => {
-        api(`/api/lessons/${id}`).then(setLesson).catch((e) => setError(e.message))
-    }, [id])
+        api(`/api/lessons/${id}`)
+            .then((l) => {
+                setLesson(l)
+                const a = l.assignment
+                if (a) setCode(localStorage.getItem(`draft:${profile.id}:${a.id}`) ?? a.starter_code ?? '')
+            })
+            .catch((e) => setError(e.message))
+    }, [id, profile.id])
 
     if (error) {
         return (
@@ -40,6 +68,68 @@ function LessonView({ id }) {
     const a = lesson.assignment
     const navBtn = 'rounded-lg border border-slate-700 px-3 py-1 text-sm hover:bg-slate-800'
 
+    function onCodeChange(value) {
+        setCode(value)
+        localStorage.setItem(draftKey(a.id), value)
+    }
+
+    function resetCode() {
+        if (!window.confirm('Reset your code to the starter code? Your current draft will be lost.')) return
+        localStorage.removeItem(draftKey(a.id))
+        setCode(a.starter_code ?? '')
+    }
+
+    const lessonPane = (
+        <Pane title="Lesson">
+            {lesson.content_type === 'markdown' ? (
+                <article className="prose prose-invert max-w-none">
+                    <ReactMarkdown>{lesson.content}</ReactMarkdown>
+                </article>
+            ) : (
+                <p className="text-slate-400">PDF lessons will be viewable here.</p>
+            )}
+
+            {a && (
+                <div className="mt-8 rounded-xl border border-emerald-400/30 bg-emerald-400/5 p-4">
+                    <h3 className="font-semibold text-emerald-300">Task: {a.title}</h3>
+                    <p className="mt-2 whitespace-pre-wrap text-sm text-slate-300">{a.instructions}</p>
+                    {a.requirements && (
+                        <>
+                            <h4 className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">Requirements</h4>
+                            <p className="mt-1 whitespace-pre-wrap text-sm text-slate-400">{a.requirements}</p>
+                        </>
+                    )}
+                </div>
+            )}
+        </Pane>
+    )
+
+    const editorPane = (
+        <Pane
+            title="Editor"
+            flush
+            actions={
+                a && (
+                    <button onClick={resetCode} className="normal-case tracking-normal text-slate-500 hover:text-slate-200">
+                        Reset
+                    </button>
+                )
+            }
+        >
+            {a ? (
+                <CodeEditor value={code} onChange={onCodeChange} language={lesson.course.language} />
+            ) : (
+                <p className="p-4 text-sm text-slate-500">This lesson has no coding task.</p>
+            )}
+        </Pane>
+    )
+
+    const outputPane = (
+        <Pane title="Output">
+            <p className="text-sm text-slate-500">Output will appear here once you can run code.</p>
+        </Pane>
+    )
+
     return (
         <div className="flex h-screen flex-col bg-slate-900 text-slate-100">
             <header className="flex items-center gap-4 border-b border-slate-800 px-4 py-2">
@@ -55,39 +145,29 @@ function LessonView({ id }) {
                 </div>
             </header>
 
-            <div className="grid min-h-0 flex-1 grid-cols-1 overflow-auto lg:grid-cols-3 lg:overflow-hidden">
-                <Pane title="Lesson">
-                    {lesson.content_type === 'markdown' ? (
-                        <article className="prose prose-invert max-w-none">
-                            <ReactMarkdown>{lesson.content}</ReactMarkdown>
-                        </article>
-                    ) : (
-                        <p className="text-slate-400">PDF lessons will be viewable here.</p>
-                    )}
-
-                    {a && (
-                        <div className="mt-8 rounded-xl border border-emerald-400/30 bg-emerald-400/5 p-4">
-                            <h3 className="font-semibold text-emerald-300">Task: {a.title}</h3>
-                            <p className="mt-2 whitespace-pre-wrap text-sm text-slate-300">{a.instructions}</p>
-                            {a.requirements && (
-                                <>
-                                    <h4 className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">Requirements</h4>
-                                    <p className="mt-1 whitespace-pre-wrap text-sm text-slate-400">{a.requirements}</p>
-                                </>
-                            )}
-                        </div>
-                    )}
-                </Pane>
-
-                <Pane title="Editor">
-                    <pre className="font-mono text-sm text-slate-400">{a?.starter_code ?? '// No task for this lesson'}</pre>
-                    <p className="mt-4 text-xs text-slate-600">The real code editor arrives in the next step.</p>
-                </Pane>
-
-                <Pane title="Output">
-                    <p className="text-sm text-slate-500">Output will appear here once you can run code.</p>
-                </Pane>
-            </div>
+            {isDesktop ? (
+                <div className="min-h-0 flex-1">
+                    <PanelGroup direction="horizontal" autoSaveId="workspace-layout">
+                        <Panel id="lesson" order={1} defaultSize={34} minSize={15} collapsible>
+                            {lessonPane}
+                        </Panel>
+                        <Handle />
+                        <Panel id="editor" order={2} defaultSize={38} minSize={20}>
+                            {editorPane}
+                        </Panel>
+                        <Handle />
+                        <Panel id="output" order={3} defaultSize={28} minSize={15} collapsible>
+                            {outputPane}
+                        </Panel>
+                    </PanelGroup>
+                </div>
+            ) : (
+                <div className="min-h-0 flex-1 overflow-auto">
+                    {lessonPane}
+                    {editorPane}
+                    {outputPane}
+                </div>
+            )}
         </div>
     )
 }
