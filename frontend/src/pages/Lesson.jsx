@@ -5,9 +5,11 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 import { useIsDesktop } from '../lib/useIsDesktop'
+import { useRunner } from '../lib/useRunner'
 import CodeEditor from '../components/CodeEditor'
+import Output from '../components/Output'
 
-// `flush` panes (editor, output) fill the whole pane with no padding.
+// `flush` panes (editor, web preview) fill the whole pane with no padding.
 // The absolute-inset trick gives children a guaranteed height to fill.
 function Pane({ title, actions, flush = false, children }) {
     return (
@@ -35,6 +37,8 @@ function LessonView({ id }) {
     const [lesson, setLesson] = useState(null)
     const [code, setCode] = useState('')
     const [error, setError] = useState('')
+    const [webRun, setWebRun] = useState(null) // { id, code } for the live preview
+    const runner = useRunner(lesson?.course.language)
 
     // Drafts are saved per user AND per assignment, so two people sharing
     // a browser never see each other's work.
@@ -66,6 +70,7 @@ function LessonView({ id }) {
     }
 
     const a = lesson.assignment
+    const isWeb = lesson.course.language === 'web'
     const navBtn = 'rounded-lg border border-slate-700 px-3 py-1 text-sm hover:bg-slate-800'
 
     function onCodeChange(value) {
@@ -77,6 +82,11 @@ function LessonView({ id }) {
         if (!window.confirm('Reset your code to the starter code? Your current draft will be lost.')) return
         localStorage.removeItem(draftKey(a.id))
         setCode(a.starter_code ?? '')
+    }
+
+    function run() {
+        if (isWeb) setWebRun({ id: Date.now(), code })
+        else runner.run(code)
     }
 
     const lessonPane = (
@@ -110,9 +120,20 @@ function LessonView({ id }) {
             flush
             actions={
                 a && (
-                    <button onClick={resetCode} className="normal-case tracking-normal text-slate-500 hover:text-slate-200">
-                        Reset
-                    </button>
+                    <span className="flex items-center gap-3 normal-case tracking-normal">
+                        <button onClick={resetCode} className="text-slate-500 hover:text-slate-200">
+                            Reset
+                        </button>
+                        {runner.running ? (
+                            <button onClick={runner.stop} className="rounded bg-red-500 px-3 py-0.5 font-semibold text-white hover:bg-red-400">
+                                Stop
+                            </button>
+                        ) : (
+                            <button onClick={run} className="rounded bg-emerald-500 px-3 py-0.5 font-semibold text-slate-900 hover:bg-emerald-400">
+                                ▶ Run
+                            </button>
+                        )}
+                    </span>
                 )
             }
         >
@@ -125,8 +146,8 @@ function LessonView({ id }) {
     )
 
     const outputPane = (
-        <Pane title="Output">
-            <p className="text-sm text-slate-500">Output will appear here once you can run code.</p>
+        <Pane title="Output" flush={isWeb}>
+            <Output isWeb={isWeb} webRun={webRun} lines={runner.lines} running={runner.running} />
         </Pane>
     )
 

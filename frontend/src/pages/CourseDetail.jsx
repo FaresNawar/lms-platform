@@ -18,7 +18,7 @@ export default function CourseDetail() {
         setBusy(true)
         try {
             await api(`/api/courses/${id}/enroll`, { method: 'POST' })
-            setCourse({ ...course, enrolled: true })
+            setCourse({ ...course, enrolled: true, can_open: true })
         } catch (e) {
             setError(e.message)
         } finally {
