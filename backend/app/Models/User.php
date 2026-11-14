@@ -29,4 +29,7 @@ class User extends Authenticatable
             'password' => 'hashed',
         ];
     }
+
+    public function taughtCourses()   { return $this->hasMany(Course::class, 'instructor_id'); }
+public function enrolledCourses() { return $this->belongsToMany(Course::class, 'enrollments')->withTimestamps(); }
 }
