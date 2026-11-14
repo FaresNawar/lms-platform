@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { Link, useParams } from 'react-router-dom'
 import { api } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 
@@ -26,6 +26,19 @@ export default function CourseDetail() {
         }
     }
 
+    async function unenroll() {
+        if (!window.confirm('Unenroll from this course? Your submissions are kept.')) return
+        setBusy(true)
+        try {
+            await api(`/api/courses/${id}/enroll`, { method: 'DELETE' })
+            setCourse({ ...course, enrolled: false, can_open: false })
+        } catch (e) {
+            setError(e.message)
+        } finally {
+            setBusy(false)
+        }
+    }
+
     if (error) return <p className="text-red-400">{error}</p>
     if (!course) return <p className="text-slate-400">Loading…</p>
 
@@ -37,7 +50,16 @@ export default function CourseDetail() {
 
             {profile.role === 'student' &&
                 (course.enrolled ? (
-                    <p className="mt-6 text-emerald-400">You're enrolled in this course ✓</p>
+                    <div className="mt-6 flex items-center gap-4">
+                        <p className="text-emerald-400">You're enrolled in this course ✓</p>
+                        <button
+                            onClick={unenroll}
+                            disabled={busy}
+                            className="text-sm text-slate-500 underline hover:text-red-400 disabled:opacity-50"
+                        >
+                            Unenroll
+                        </button>
+                    </div>
                 ) : (
                     <button
                         onClick={enroll}
@@ -51,9 +73,21 @@ export default function CourseDetail() {
             <h2 className="mb-3 mt-10 text-xl font-semibold">Syllabus</h2>
             <ol className="space-y-2">
                 {course.lessons.map((l, i) => (
-                    <li key={l.id} className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-3">
-                        <span className="mr-3 text-slate-500">{i + 1}.</span>
-                        {l.title}
+                    <li key={l.id}>
+                        {course.can_open ? (
+                            <Link
+                                to={`/lessons/${l.id}`}
+                                className="block rounded-lg border border-slate-700 bg-slate-800 px-4 py-3 hover:border-emerald-400"
+                            >
+                                <span className="mr-3 text-slate-500">{i + 1}.</span>
+                                {l.title}
+                            </Link>
+                        ) : (
+                            <div className="rounded-lg border border-slate-800 bg-slate-800/50 px-4 py-3 text-slate-500">
+                                <span className="mr-3">{i + 1}.</span>
+                                {l.title}
+                            </div>
+                        )}
                     </li>
                 ))}
             </ol>

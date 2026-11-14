@@ -39,6 +39,7 @@ class CourseController extends Controller
             'language' => $course->language,
             'instructor' => $course->instructor?->name,
             'enrolled' => $enrolled,
+            'can_open' => $enrolled || $course->instructor_id === $request->user()->id,
             'lessons' => $course->lessons->map(fn ($l) => [
                 'id' => $l->id,
                 'title' => $l->title,
@@ -83,4 +84,12 @@ class CourseController extends Controller
             'enrolled' => $enrolled,
         ];
     }
+
+    // DELETE /api/courses/{course}/enroll
+public function unenroll(Request $request, Course $course): JsonResponse
+{
+    $request->user()->enrolledCourses()->detach($course->id);
+
+    return response()->json(['enrolled' => false]);
+}
 }

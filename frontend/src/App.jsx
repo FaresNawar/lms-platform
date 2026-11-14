@@ -5,6 +5,7 @@ import AuthPage from './pages/AuthPage'
 import Dashboard from './pages/Dashboard'
 import Catalog from './pages/Catalog'
 import CourseDetail from './pages/CourseDetail'
+import Lesson from './pages/Lesson'
 
 function Splash() {
   return <div className="flex min-h-screen items-center justify-center bg-slate-900 text-slate-400">Loading…</div>
@@ -29,6 +30,9 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<GuestOnly><AuthPage mode="login" /></GuestOnly>} />
           <Route path="/signup" element={<GuestOnly><AuthPage mode="signup" /></GuestOnly>} />
+
+          {/* Workspace: no navbar, full screen */}
+          <Route path="/lessons/:id" element={<Protected><Lesson /></Protected>} />
 
           <Route element={<Protected><Layout /></Protected>}>
             <Route path="/dashboard" element={<Dashboard />} />
